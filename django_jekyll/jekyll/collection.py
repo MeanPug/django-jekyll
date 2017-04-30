@@ -1,13 +1,17 @@
 from django.utils.text import slugify
+from django.conf import settings
 from django_jekyll import config, exceptions
-from django_jekyll.jekyll.doc import Document
+from django_jekyll.jekyll.doc import JekyllDocument
+from django_jekyll.lib import fs
 import re
 import logging
+import os
+import inspect
 
 logger = logging.getLogger(__name__)
 
 
-class Collection(object):
+class JekyllCollection(object):
     """ a Jekyll Collection."""
     @property
     def docs(self):
@@ -76,9 +80,9 @@ class Collection(object):
             else:
                 field_val_map[fname] = field_val
 
-        return Document(field_val_map[self.content_field],
-                        filename=field_val_map[self.filename_field] if type(self.filename_field) is str else self.filename_field(model),
-                        frontmatter_data=field_val_map)
+        return JekyllDocument(field_val_map[self.content_field],
+                              filename=field_val_map[self.filename_field] if type(self.filename_field) is str else self.filename_field(model),
+                              frontmatter_data=field_val_map)
 
     def parse_field(self, model, field_name, field_meta):
         """ given a model, a field name (can include lookups like 'client__name', 'client__goal__name', etc.), and the
@@ -148,21 +152,38 @@ def discover_collections():
     the overriden name is in config.JEKYLL_COLLECTIONS_FILENAME)
     :return: `generator` of `Collection` discovered in each of the collection files found
     """
-    pass
+    collections = []
+    apps = config.JEKYLL_COLLECTIONS_INCLUDE_APPS or settings.INSTALLED_APPS
+
+    for app in apps:
+        try:
+            jekyll_collection_module = __import__('%s.%s' % (app, config.JEKYLL_COLLECTIONS_MODULE), fromlist=[app])
+        except ImportError:
+            continue
+
+        for name, cls in inspect.getmembers(jekyll_collection_module):
+            if inspect.isclass(cls) and cls != JekyllCollection and issubclass(cls, JekyllCollection):
+                collections.append(cls())
+
+    return collections
 
 
-def atomic_write_collection(collection, location):
+def atomic_write_collection(collection, build_dir):
     """ given a collection, atomically write the collections' data to location. Meaning, if any document in the collection
     fails to generate/write, the entire operation aborts
     :param collection:
     :return:
     """
     counter = 0
+    collection_dir = os.path.join(build_dir, collection.jekyll_label)
 
     try:
         for doc in collection.docs:
-            doc.write(location)
+            doc.write(collection_dir)
+            counter += 1
     except (exceptions.DocGenerationFailure, exceptions.CollectionSizeExceeded) as exc:
         logger.error('atomic write failed! (%s)' % str(exc))
+        fs.remove_dir(collection_dir)
+        raise exc
 
-
+    return counter
