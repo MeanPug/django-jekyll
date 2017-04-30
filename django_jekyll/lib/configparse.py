@@ -6,7 +6,7 @@ import os
 class ConfigParser(object):
     def __init__(self):
         self.defaults = {
-            'JEKYLL_PROJECT_DIR': fs.search_parents_for_dirs(os.path.dirname(os.path.abspath(__file__)), ['site', 'jekyll']),
+            'JEKYLL_PROJECT_DIR': fs.search_parents_for_dirs(os.path.dirname(os.path.abspath(__file__)), ['site']),
             'JEKYLL_PROJECT_STAGING_DIR': '/tmp/jekyll',
             'JEKYLL_COLLECTIONS_MODULE': 'jekyll',
             'JEKYLL_COLLECTIONS_INCLUDE_APPS': None,

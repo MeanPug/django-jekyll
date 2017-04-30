@@ -10,6 +10,11 @@ def write_file(content, location, **frontmatter_data):
     :param frontmatter: `splat` of frontmatter keys / values to write to the file
     :return:
     """
+    dirname = os.path.dirname(location)
+
+    if not is_dir(dirname):
+        os.makedirs(dirname)
+
     jekyll_post = frontmatter.Post(content, **frontmatter_data)
 
     with open(location, 'wb') as pfile:

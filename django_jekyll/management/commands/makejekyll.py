@@ -33,7 +33,9 @@ class Command(BaseCommand):
             if not options['no_input'] and raw_input('will build to %s, type "yes" to continue: ' % config.JEKYLL_PROJECT_DIR) != 'yes':
                 raise CommandError("operation cancelled")
 
-        for collection in discover_collections():
+        collections = discover_collections()
+
+        for collection in collections:
             self.stdout.write('discovered %s, preparing to generate Jekyll docs..' % collection)
 
             message += '\n\n'
@@ -52,12 +54,13 @@ class Command(BaseCommand):
         if not options['dry_run']:
             self.stdout.write('docs generation success, now transferring staging contents to project folder...')
 
-            # for d in fs.list_dir(config.JEKYLL_PROJECT_STAGING_DIR):
-            #     if fs.is_dir(os.path.join(config.JEKYLL_PROJECT_DIR, d)):
-            #         fs.remove_dir(os.path.join(config.JEKYLL_PROJECT_DIR, d))
-            #
-            #     fs.move_dir(os.path.join(config.JEKYLL_PROJECT_STAGING_DIR, d), config.JEKYLL_PROJECT_DIR)
-            #
-            #     self.stdout.write('moved staging dir %s to project dir %s' % (d, config.JEKYLL_PROJECT_DIR))
+            for collection in collections:
+                if fs.is_dir(os.path.join(config.JEKYLL_PROJECT_DIR, collection.location)):
+                    fs.remove_dir(os.path.join(config.JEKYLL_PROJECT_DIR, collection.location))
+
+                if fs.is_dir(os.path.join(config.JEKYLL_PROJECT_STAGING_DIR, collection.location)):
+                    fs.move_dir(os.path.join(config.JEKYLL_PROJECT_STAGING_DIR, collection.location), config.JEKYLL_PROJECT_DIR)
+
+                self.stdout.write('moved staging dir %s to project dir %s' % (collection.location, config.JEKYLL_PROJECT_DIR))
 
         self.stdout.write(self.style.SUCCESS(message))

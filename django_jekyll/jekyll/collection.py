@@ -14,6 +14,10 @@ logger = logging.getLogger(__name__)
 class JekyllCollection(object):
     """ a Jekyll Collection."""
     @property
+    def location(self):
+        return '_' + self.jekyll_label
+
+    @property
     def docs(self):
         """ generate the documents to be written out
         :return: `generator` of `docs.Document` to be written out
@@ -110,7 +114,7 @@ class JekyllCollection(object):
 
             if field_parts:
                 related_model = getattr(model, field_parts[0])
-                return self.parse_field(related_model, field_parts[1], related_model._meta.get_field(field_parts[1]))
+                return self.parse_field(related_model, '__'.join(field_parts[1:]), related_model._meta.get_field(field_parts[1]))
             else:
                 return getattr(model, '%s_id' % field_name)
 
@@ -191,7 +195,7 @@ def atomic_write_collection(collection, build_dir):
     :return:
     """
     counter = 0
-    collection_dir = os.path.join(build_dir, '_' + collection.jekyll_label)
+    collection_dir = os.path.join(build_dir, collection.location)
 
     try:
         for doc in collection.docs:
