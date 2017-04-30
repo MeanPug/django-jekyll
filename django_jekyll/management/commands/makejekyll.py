@@ -16,10 +16,22 @@ class Command(BaseCommand):
             default=False,
             help='Run the build as a dry run (generate collections and print some stats about them to stdout)'
         )
+        parser.add_argument(
+            '--no-input',
+            action='store_true',
+            dest='no_input',
+            default=False,
+            help='Run the build without prompting for confirmation of build location'
+        )
 
     def handle(self, *args, **options):
         message = ''
-        #TODO: Add prompt here asking user to confirm location of build (to JEKYLL_PROJECT_DIR), since this is a destructive op
+
+        if options['dry_run']:
+            self.stdout.write('**RUNNNING IN DRY MODE**')
+        else:
+            if not options['no_input'] and raw_input('will build to %s, type "yes" to continue: ' % config.JEKYLL_PROJECT_DIR) != 'yes':
+                raise CommandError("operation cancelled")
 
         for collection in discover_collections():
             self.stdout.write('discovered %s, preparing to generate Jekyll docs..' % collection)

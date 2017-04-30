@@ -28,7 +28,7 @@ class JekyllCollection(object):
             elif len(batch) == 0:
                 return
 
-            parsed = self.parse_to_docs(batch)
+            parsed = self.parse_to_documents(batch)
 
             for p in parsed:
                 yield p
@@ -41,7 +41,7 @@ class JekyllCollection(object):
         """
         return self.model.objects.all()
 
-    def parse_to_docs(self, models):
+    def parse_to_documents(self, models):
         """ parse the given list of Models to Document instances
         :param models:
         :return:
@@ -98,7 +98,7 @@ class JekyllCollection(object):
         if field_meta.concrete and not (field_meta.is_relation or field_meta.one_to_one or field_meta.many_to_one or field_meta.one_to_many or field_meta.many_to_many):
             # concrete field
             return getattr(model, field_name)
-        elif field_meta.many_to_many and not field_meta.auto_created:
+        elif field_meta.many_to_many:
             # many to many
             return list(getattr(model, field_name).values_list('id', flat=True))
         elif field_meta.one_to_many:
