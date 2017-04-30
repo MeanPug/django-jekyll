@@ -11,3 +11,6 @@ class JekyllDocument(object):
 
     def write(self, location):
         fs.write_file(self.content, os.path.join(location, self.filename + '.md'), **self.frontmatter_data)
+
+    def __str__(self):
+        return '%s (Content Length = %s, Frontmatter Data = %s)' % (self.filename, len(self.content), self.frontmatter_data)

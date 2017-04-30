@@ -52,35 +52,35 @@ class JekyllCollection(object):
         field_val_map = {}
         field_meta_map = {}
 
-        for f in model._meta.get_fields(include_hidden=True):
-            if f.name in self.fields:
-                field_meta_map[f.name] = f
-            elif f.related_model:
-                # if the field is a related model field AND we have a related lookup field in our self.fields (like 'client__name')
-                for meta_field in self.fields:
-                    field_parts = self._related_lookup_parts(meta_field)
+        model_fields = {f.name: f for f in model._meta.get_fields(include_hidden=True)}
 
-                    if field_parts and field_parts[0] == f.name:
-                        field_meta_map[meta_field] = f
+        for field in self.fields:
+            if field in model_fields:
+                field_meta_map[field] = model_fields[field]
+            else:
+                # its possible we're dealing with a field like 'client__name'
+                field_parts = self._related_lookup_parts(field)
+
+                if field_parts and field_parts[0] in model_fields:
+                    field_meta_map[field] = model_fields[field_parts[0]]
+
+        # for each field, run it through a field parser to get the value of the field
+        for fname, fmeta in field_meta_map.items():
+            field_val_map[fname] = self.parse_field(model, fname, fmeta)
+
+        # if we want the doc to have no content
+        if self.content_field is None:
+            field_val_map[self.content_field] = ''
 
         # check that all required fields are present, raising errors if not
-        if self.content_field not in field_meta_map:
+        if self.content_field not in field_val_map:
             raise exceptions.DocGenerationFailure("content_field %s wasn't found on model %s" % (self.content_field, model))
         elif type(self.filename_field) is str and self.filename_field not in field_meta_map:
             raise exceptions.DocGenerationFailure("filename_field %s is a string and wasn't found on model %s, either make it a function or use a different field" % (self.filename_field, model))
 
-        # for each field, run it through a field parser to get the value of the field
-        for fname, fmeta in field_meta_map.items():
-            field_val = self.parse_field(model, fname, fmeta)
+        content = field_val_map.pop(self.content_field)
 
-            field_parts = self._related_lookup_parts(fname)
-
-            if fmeta.related_model and field_parts:
-                field_val_map[field_parts[1]] = field_val
-            else:
-                field_val_map[fname] = field_val
-
-        return JekyllDocument(field_val_map[self.content_field],
+        return JekyllDocument(content,
                               filename=field_val_map[self.filename_field] if type(self.filename_field) is str else self.filename_field(model),
                               frontmatter_data=field_val_map)
 
@@ -95,23 +95,39 @@ class JekyllCollection(object):
         :param field_meta:
         :return:
         """
-        pass
+        if field_meta.concrete and not (field_meta.is_relation or field_meta.one_to_one or field_meta.many_to_one or field_meta.one_to_many or field_meta.many_to_many):
+            # concrete field
+            return getattr(model, field_name)
+        elif field_meta.many_to_many and not field_meta.auto_created:
+            # many to many
+            return list(getattr(model, field_name).values_list('id', flat=True))
+        elif field_meta.one_to_many:
+            # one to many
+            return list(getattr(model, field_name).values_list('id', flat=True))
+        elif field_meta.one_to_one or field_meta.many_to_one or field_meta.related_model:
+            # can be one-to-one, many-to-one, these we have to look for related lookups on
+            field_parts = self._related_lookup_parts(field_name)
+
+            if field_parts:
+                related_model = getattr(model, field_parts[0])
+                return self.parse_field(related_model, field_parts[1], related_model._meta.get_field(field_parts[1]))
+            else:
+                return getattr(model, '%s_id' % field_name)
 
     ##-- Helpers --##
     def _related_lookup_parts(self, field_name):
-        related_lookup_pattern = '^(\w(?:[0-9A-Za-z]|_[0-9A-Za-z])*)__\w.*'
+        related_lookup_pattern = '^(\w(?:[0-9A-Za-z]|_[0-9A-Za-z])*)__(\w.*)'
 
         match = re.match(related_lookup_pattern, field_name)
 
-        if match:
-            immediate_field = match.groups()[0]
+        if not match:
+            return []
+        else:
+            head = match.groups()[0]
+            tail = match.groups()[1]
 
-            tail_field_pattern = '.*__(\w(?:[0-9A-Za-z]|_[0-9A-Za-z])*)$'
-            tail_field = re.match(tail_field_pattern, field_name).groups()[0]
-
-            return immediate_field, tail_field
-
-        return None
+            remaining_parts = self._related_lookup_parts(tail)
+            return [head] + remaining_parts if remaining_parts else [head, tail]
 
     ##-- Accessors --##
     @property
@@ -124,15 +140,15 @@ class JekyllCollection(object):
 
     @property
     def content_field(self):
-        return self.Meta.content_field
+        return getattr(self.Meta, 'content_field')
 
     @property
     def filename_field(self):
-        return self.Meta.filename_field or str
+        return getattr(self.Meta, 'filename_field', str)
 
     @property
     def jekyll_label(self):
-        return self.Meta.jekyll_label or slugify(self.model.__name__).replace('-', '_')
+        return getattr(self.Meta, 'jekyll_label', slugify(self.model.__name__).replace('-', '_'))
 
     def __str__(self):
         return 'Collection (%s -> %s)' % (self.model.__name__, self.jekyll_label)
@@ -175,7 +191,7 @@ def atomic_write_collection(collection, build_dir):
     :return:
     """
     counter = 0
-    collection_dir = os.path.join(build_dir, collection.jekyll_label)
+    collection_dir = os.path.join(build_dir, '_' + collection.jekyll_label)
 
     try:
         for doc in collection.docs:

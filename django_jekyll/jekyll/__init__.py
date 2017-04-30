@@ -1,1 +1,1 @@
-__author__ = 'bobbysteinbach'
+from django_jekyll.jekyll.collection import JekyllCollection, discover_collections, atomic_write_collection
